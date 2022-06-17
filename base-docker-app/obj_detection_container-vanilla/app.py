@@ -32,6 +32,8 @@ from tensorflow.python.keras.utils.data_utils import get_file
 
 #tenserflow was added as extra library
 import tensorflow as tf
+import time
+
 
 #used for generating colors for classes
 np.random.seed(20)
@@ -40,10 +42,9 @@ modelURL = "http://download.tensorflow.org/models/object_detection/tf2/20200711/
 
 app = Flask(__name__)
 
-def createBoundingBox(image):
-
+def createBoundingBox(image,model,modelName):
+    start = time.time()
     classesList,colorList = readClasses("coco.names")
-    model,modelName = loadModel(modelURL)
     #converting to RGB format
     #np array
     inputTensor = cv2.cvtColor(image.copy(),cv2.COLOR_BGR2RGB)
@@ -65,6 +66,7 @@ def createBoundingBox(image):
     #here we are declaring that we can have maximum of 50 bounding boxes, 50% of overlap is acceptable and confidence is also 50%.
     bboxIdx = tf.image.non_max_suppression(bboxs,classesScores,max_output_size= 50, iou_threshold=0.5,score_threshold=0.5)
 
+    bounding_box_coords = []
     if len(bboxIdx) != 0:
         for i in bboxIdx:
             bbox = tuple(bboxs[i].tolist())
@@ -79,41 +81,26 @@ def createBoundingBox(image):
 
             #unpack bounding box so we can get values of the pixels on x and y axis
             #they are relative to widht and the height of the image and they are not absolute locations
+
+
             ymin, xmin, ymax, xmax = bbox
             xmin, xmax, ymin, ymax = (xmin*imW, xmax*imW, ymin*imH, ymax*imH)
             xmin, xmax, ymin, ymax = int(xmin), int(xmax), int(ymin), int(ymax)
-
-            cv2.rectangle(image,(xmin,ymin),(xmax,ymax),color = classColor,thickness = 1)
-            cv2.putText(image,displayText,(xmin,ymin - 10),cv2.FONT_HERSHEY_PLAIN,1,classColor,2)
-            lineWidth = min(int((xmax-xmin)*0.2), int((ymax - ymin)*0.2) )
-
-            #Creating bolded edges so we can see easier
-            cv2.line(image, (xmin,ymin), (xmin+lineWidth,ymin),classColor,thickness = 5)
-            cv2.line(image, (xmin,ymin), (xmin,ymin+lineWidth),classColor,thickness = 5)
-
-            cv2.line(image, (xmax,ymin), (xmax-lineWidth,ymin),classColor,thickness = 5)
-            cv2.line(image, (xmax,ymin), (xmax,ymin+lineWidth),classColor,thickness = 5)
-
-            ############################################################################
+            tuple4 = (xmin,xmax,ymin,ymax)
+            bounding_box_coords.append(tuple4)
+    end = time.time()
+    time_passed = end - start
+    #Writing the time for processing for each image into a file, with that we will calculate average time for processing in total.
+    with open("time_for_processing", "a") as f:
+        f.write(str(time_passed) + "\n")
+    return bounding_box_coords
 
 
-            cv2.line(image, (xmin,ymax), (xmin+lineWidth,ymax),classColor,thickness = 5)
-            cv2.line(image, (xmin,ymax), (xmin,ymax-lineWidth),classColor,thickness = 5)
-
-            cv2.line(image, (xmax,ymax), (xmax-lineWidth,ymax),classColor,thickness = 5)
-            cv2.line(image, (xmax,ymax), (xmax,ymax-lineWidth),classColor,thickness = 5)
-
-    return image,modelName
-
-
-def predictImage(imagePath):
+def predictImage(imagePath,model,modelName):
     #image = imagePath if we are sending image to this function, if we are sending path to image then we need cv2.imread function
     image = cv2.imread(imagePath)
-    bboxImage,modelName = createBoundingBox(image)
-    cv2.imwrite(modelName + ".jpg",bboxImage)
-    cv2.imshow("Result",bboxImage)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    coords = createBoundingBox(image,model,modelName)
+    return coords
 
 
 def loadModel(modelURL):
@@ -143,9 +130,10 @@ def readClasses(classesFilePath):
     return classesList,colorList
 
 
-def detection_loop(image):
-   predictImage(image)
-   pass
+def detection_loop(image,model,modelName):
+   coords = predictImage(image,model,modelName)
+   return coords
+
 
 
 #initializing the flask app
@@ -189,7 +177,9 @@ def main():
 # image=cv2.imread(args.input)
 # image=cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
 
+
 if __name__ == '__main__':
     #loadModel(modelURL)
-    predictImage("000000147495.jpg")
+    model,modelName = loadModel(modelURL)
+    print(detection_loop("000000146906.jpg",model,modelName))
     #app.run(debug = True, host = '0.0.0.0')
